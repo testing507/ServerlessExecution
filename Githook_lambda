@@ -1,0 +1,104 @@
+import json
+import boto3
+from botocore.vendored import requests
+from configparser import ConfigParser
+
+def lambda_handler(event, context):
+  gitevent=json.loads(event['body'])
+  print("Payload Received from Github:", gitevent)
+  gitCommits=gitevent['commits']
+  fileCopyList = []
+  fileDeleteList = []
+  fileModifylist= []
+  for commit in gitCommits:
+    print("Payload in commits is :" , commit)
+    removedFiles = commit['removed']
+    if len(removedFiles) > 0:
+      print("Files removed in Git are :" ,removedFiles)
+      fileDeleteList.extend(removedFiles)
+      deleteFile(fileDeleteList)
+    addedFiles = commit['added']
+    if len(addedFiles) > 0:
+      print("Files added in Git are :" ,addedFiles)
+      fileCopyList.extend(addedFiles)
+      downloadFile(fileCopyList)
+    modifiedFiles = commit['modified']
+    if len(modifiedFiles) > 0:
+      print("Files added in Git are :" ,modifiedFiles)
+      fileModifylist.extend(modifiedFiles)
+      modifyFile(fileModifylist)
+  StartFargate()
+  return {
+    'statusCode': 200,
+    'body': json.dumps('Hello from Lambda!')
+    
+  }
+
+def downloadFile(fileList):
+  gitURL = "https://raw.github.com/ranjithpydipati/ServerlessExecution/master/"
+  print(gitURL)
+  bucket = "gitrepopoc"
+  headers={'Authorization': 'token 01b29c663ca127b933e6467e6705c8def0f4f7b1', 'Accept': 'Accept: application.vnd.github.v3.raw'}
+  s3 = boto3.client('s3')
+  for key in fileList:
+    gitURL = gitURL+key
+    response = requests.get(gitURL, stream=True, headers=headers)
+    print(gitURL)
+    open("/tmp/key" , 'wb').write(response.content)
+    with open("/tmp/key" , 'rb') as f:
+      s3.put_object(Bucket=bucket, Key=key, Body=f)
+
+def deleteFile(fileList):
+  s3 = boto3.client('s3')
+  bucket = "gitrepopoc"
+  for key in fileList:
+    s3.delete_object(Bucket=bucket,Key=key)
+    
+
+def modifyFile(fileList):
+  s3 = boto3.client('s3')
+  gitURL = "https://raw.github.com/ranjithpydipati/ServerlessExecution/master/"
+  print(gitURL)
+  bucket = "gitrepopoc"
+  headers={'Authorization': 'token 01b29c663ca127b933e6467e6705c8def0f4f7b1', 'Accept': 'Accept: application.vnd.github.v3.raw'}
+  for key in fileList:
+    s3.delete_object(Bucket=bucket,Key=key)
+    gitURL = gitURL+key
+    response = requests.get(gitURL, stream=True, headers=headers)
+    print(gitURL)
+    open("/tmp/key" , 'wb').write(response.content)
+    with open("/tmp/key" , 'rb') as f:
+      s3.put_object(Bucket=bucket, Key=key, Body=f)
+  
+
+
+def StartFargate():
+        client = boto3.client('ecs')
+        s3_ext = boto3.resource('s3')
+        s3_ext.Bucket('gitrepopoc').download_file('testconfig.config', '/tmp/testconfig.config')
+        data_file = '/tmp/testconfig.config'
+        config = ConfigParser()
+        config.read(data_file)
+        cluster_name = "JmeterPOC"
+        task_definition = "TestInitiationNew:5"
+        Instance_Count= int(config['DEFAULT']['TestInstances'])
+        StartTask= config['DEFAULT']['StartTest']
+        if StartTask =='true':
+                response = client.run_task(
+                cluster= cluster_name, # name of the cluster
+                launchType = 'FARGATE',
+                taskDefinition=task_definition, # replace with your task definition name and revision
+                count = Instance_Count,
+                platformVersion='LATEST',
+                networkConfiguration={
+                    'awsvpcConfiguration': {
+                        'subnets': [
+                            'subnet-0209f1f953c0493dd', # replace with your public subnet or a private with NAT
+                            'subnet-0480403dd39bdadfa' # Second is optional, but good idea to have two
+                        ],
+                        'assignPublicIp': 'ENABLED'
+                    }
+                })
+                print(response)
+
+                
