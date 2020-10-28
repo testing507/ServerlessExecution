@@ -38,7 +38,7 @@ def downloadFile(fileList):
   gitURL = "https://raw.github.com/ranjithpydipati/ServerlessExecution/master/"
   print(gitURL)
   bucket = "gitrepopoc"
-  headers={'Authorization': 'token 01b29c663ca127b933e6467e6705c8def0f4f7b1', 'Accept': 'Accept: application.vnd.github.v3.raw'}
+  headers={'Authorization': 'token XXXXXXXXXXXXXXXXXXXXXXx', 'Accept': 'Accept: application.vnd.github.v3.raw'}
   s3 = boto3.client('s3')
   for key in fileList:
     gitURL = gitURL+key
